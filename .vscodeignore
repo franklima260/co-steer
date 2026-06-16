@@ -1,0 +1,23 @@
+# Source and build intermediates (the extension ships the bundled dist/extension.js)
+src/**
+out/**
+.vscode-test/**
+test-fixtures/**
+
+# Tooling / config not needed at runtime
+esbuild.js
+tsconfig.json
+.github/**
+.claude/**
+.gitignore
+.vscodeignore
+*.vsix
+**/*.map
+**/*.ts
+
+# Repo docs that don't belong in the published package
+universal_artifact_review_ui_spec.md
+Testing_Standards.md
+Telemetry_Standards.md
+REVIEW_REPORT.md
+package-lock.json
