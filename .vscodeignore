@@ -1,3 +1,6 @@
+# Dependencies are bundled into dist/extension.js by esbuild, so node_modules is not shipped
+node_modules/**
+
 # Source and build intermediates (the extension ships the bundled dist/extension.js)
 src/**
 out/**

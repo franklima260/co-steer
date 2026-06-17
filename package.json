@@ -14,28 +14,88 @@
   "contributes": {
     "commands": [
       {
+        "command": "co-steer.reviewFile",
+        "title": "Review File",
+        "category": "Co-Steer",
+        "icon": "$(eye)"
+      },
+      {
         "command": "co-steer.iterate",
         "title": "Iterate with Agent",
+        "category": "Co-Steer",
         "icon": "$(play)"
       },
       {
         "command": "co-steer.approve",
         "title": "Approve Artifact",
+        "category": "Co-Steer",
         "icon": "$(check)"
       },
       {
         "command": "co-steer.diff",
         "title": "Diff vs Target",
+        "category": "Co-Steer",
         "icon": "$(diff)"
       },
       {
         "command": "co-steer.addComment",
         "title": "Add Comment",
+        "category": "Co-Steer",
         "icon": "$(comment-add)"
+      },
+      {
+        "command": "co-steer.copyPrompt",
+        "title": "Copy Agent Prompt",
+        "category": "Co-Steer",
+        "icon": "$(clippy)"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "co-steer.addComment",
+          "when": "false"
+        },
+        {
+          "command": "co-steer.iterate",
+          "when": "false"
+        },
+        {
+          "command": "co-steer.approve",
+          "when": "false"
+        },
+        {
+          "command": "co-steer.diff",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "co-steer.reviewFile",
+          "when": "view == co-steer-artifacts",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "co-steer.reviewFile",
+          "when": "resourceScheme == file",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "co-steer.reviewFile",
+          "when": "!explorerResourceIsFolder",
+          "group": "co-steer"
+        }
+      ],
       "view/item/context": [
+        {
+          "command": "co-steer.copyPrompt",
+          "when": "view == co-steer-artifacts",
+          "group": "inline"
+        },
         {
           "command": "co-steer.diff",
           "when": "view == co-steer-artifacts",
@@ -77,6 +137,12 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "co-steer-artifacts",
+        "contents": "No artifacts are in review yet.\n\nOpen a file you want an AI agent to help with, then start a review.\n[Review a File](command:co-steer.reviewFile)\n\nHighlight lines in the review view and add comments; run Iterate to have your agent apply them."
+      }
+    ],
     "configuration": {
       "title": "Co-Steer",
       "properties": {
@@ -97,12 +163,18 @@
           "type": "string",
           "default": "Execute the following approved plan:",
           "markdownDescription": "Text prepended to an approved Markdown artifact when handing it off to the agent via \"Run as prompt\"."
+        },
+        "co-steer.customCommentSyntaxes": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "A dictionary mapping VS Code language IDs or file extensions to custom comment syntaxes (e.g. `{\"json\": \"//\", \"html\": [\"<!--\", \"-->\"]}`)."
         }
       }
     }
   },
   "activationEvents": [
-    "onView:co-steer-artifacts"
+    "onView:co-steer-artifacts",
+    "onCommand:co-steer.reviewFile"
   ],
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -127,6 +199,10 @@
     "@vscode/test-electron": "^2.4.0",
     "mocha": "^10.4.0",
     "glob": "^10.4.1",
-    "@vscode/vsce": "^3.2.0"
+    "@vscode/vsce": "^3.2.0",
+    "@types/markdown-it": "^14.1.1"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0"
   }
 }

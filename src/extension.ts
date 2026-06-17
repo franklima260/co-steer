@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import * as child_process from 'child_process';
 import { ArtifactTreeProvider, ArtifactItem } from './providers/ArtifactTreeProvider';
 import { ReviewDocumentProvider } from './providers/ReviewDocumentProvider';
@@ -9,10 +10,17 @@ import { createReviewWatcher } from './watchers/FileSystemWatcher';
 import { ArtifactStateStore } from './state/ArtifactStateStore';
 import { runAsPrompt } from './agent/promptRunner';
 import { buildAgentSpawn } from './agent/spawn';
+import { buildReviewPrompt } from './agent/reviewPrompt';
+import { MarkdownReviewPanel } from './panels/MarkdownReviewPanel';
 import { logger } from './utils/logger';
+import { checkAndPromptWorkspaceRules } from './agent/workspaceRules';
+import { injectPointer, removePointer } from './utils/pointerInjector';
 
 export function activate(context: vscode.ExtensionContext) {
     logger.info('Co-Steer is activating');
+
+    // Check workspace rules for agents
+    checkAndPromptWorkspaceRules(context);
 
     // Tracks transient per-artifact state (e.g. "iterating").
     const stateStore = new ArtifactStateStore();
@@ -48,8 +56,10 @@ export function activate(context: vscode.ExtensionContext) {
         } else {
             commentController.renderFromSidecar(uri.fsPath);
         }
+        MarkdownReviewPanel.notifyChanged(uri.fsPath);
     });
     context.subscriptions.push(watcher);
+    context.subscriptions.push({ dispose: () => MarkdownReviewPanel.disposeAll() });
 
     // Render existing/agent-authored comments whenever an artifact is opened for review.
     const renderForReviewDoc = (doc?: vscode.TextDocument) => {
@@ -71,7 +81,7 @@ export function activate(context: vscode.ExtensionContext) {
     const pendingRefreshes = new Map<string, NodeJS.Timeout>();
     const REFRESH_DEBOUNCE_MS = 150;
 
-    physicalFileWatcher.onDidChange(uri => {
+    const handlePhysicalFileChange = (uri: vscode.Uri) => {
         if (uri.scheme !== 'file') {
             return;
         }
@@ -88,8 +98,13 @@ export function activate(context: vscode.ExtensionContext) {
             pendingRefreshes.delete(filePath);
             logger.debug('Physical artifact changed, updating virtual document', { file: filePath });
             reviewDocumentProvider.update(uri.with({ scheme: ReviewDocumentProvider.scheme }));
+            MarkdownReviewPanel.notifyChanged(filePath);
         }, REFRESH_DEBOUNCE_MS));
-    });
+    };
+
+    physicalFileWatcher.onDidChange(handlePhysicalFileChange);
+    physicalFileWatcher.onDidCreate(handlePhysicalFileChange);
+    physicalFileWatcher.onDidDelete(handlePhysicalFileChange);
     context.subscriptions.push(physicalFileWatcher);
     context.subscriptions.push({
         dispose: () => {
@@ -103,6 +118,116 @@ export function activate(context: vscode.ExtensionContext) {
     // Create Comment Command
     context.subscriptions.push(vscode.commands.registerCommand('co-steer.addComment', (reply: vscode.CommentReply) => {
         commentController.addComment(reply);
+    }));
+
+    // Open an existing artifact in the right reviewer: rendered panel for markdown,
+    // read-only text view otherwise. Used by the tree items.
+    const openArtifact = async (originalFilePath: string) => {
+        if (/\.(md|markdown)$/i.test(originalFilePath)) {
+            MarkdownReviewPanel.show(originalFilePath);
+        } else {
+            const reviewUri = vscode.Uri.file(originalFilePath).with({ scheme: ReviewDocumentProvider.scheme });
+            await vscode.window.showTextDocument(reviewUri, { preview: false });
+            commentController.renderFromSidecar(`${originalFilePath}.review.md`);
+        }
+    };
+    context.subscriptions.push(vscode.commands.registerCommand('co-steer.open', (arg?: vscode.Uri | ArtifactItem) => {
+        const fsPath = arg instanceof vscode.Uri ? arg.fsPath : arg?.originalUri?.fsPath;
+        if (fsPath) {
+            return openArtifact(fsPath);
+        }
+    }));
+
+    // Copy the canonical "act on the sidecar" instruction to the clipboard, to paste into a
+    // chat-based agent (e.g. the host IDE's assistant) that isn't a configurable CLI.
+    const resolveArtifactPath = (arg?: vscode.Uri | ArtifactItem): string | undefined => {
+        let fsPath = arg instanceof vscode.Uri ? arg.fsPath : arg?.originalUri?.fsPath;
+        if (!fsPath && vscode.window.activeTextEditor) {
+            fsPath = vscode.window.activeTextEditor.document.uri.fsPath;
+        }
+        if (fsPath?.endsWith('.review.md')) {
+            fsPath = fsPath.replace(/\.review\.md$/, '');
+        }
+        return fsPath;
+    };
+    context.subscriptions.push(vscode.commands.registerCommand('co-steer.copyPrompt', async (arg?: vscode.Uri | ArtifactItem) => {
+        const fsPath = resolveArtifactPath(arg);
+        if (!fsPath) {
+            logger.counter('co-steer.copyPrompt', { outcome: 'no_file' });
+            vscode.window.showWarningMessage('Select an artifact (or open a file) to copy its agent prompt.');
+            return;
+        }
+        const prompt = buildReviewPrompt({
+            artifactPath: vscode.workspace.asRelativePath(fsPath),
+            sidecarPath: vscode.workspace.asRelativePath(`${fsPath}.review.md`)
+        });
+        await vscode.env.clipboard.writeText(prompt);
+        logger.counter('co-steer.copyPrompt', { outcome: 'success' });
+        vscode.window.showInformationMessage('Co-Steer: agent prompt copied — paste it to your AI agent.');
+    }));
+
+    // Entry point: start reviewing a file. Creates the sidecar (so it shows in the panel),
+    // opens the read-only ai-review view, and makes the commenting gutter available.
+    context.subscriptions.push(vscode.commands.registerCommand('co-steer.reviewFile', async (uriArg?: vscode.Uri) => {
+        let targetPath: string | undefined;
+        if (uriArg?.scheme === 'file') {
+            targetPath = uriArg.fsPath;
+        } else if (vscode.window.activeTextEditor) {
+            // Works for a file:// doc or an already-open ai-review doc (fsPath strips scheme).
+            targetPath = vscode.window.activeTextEditor.document.uri.fsPath;
+        }
+        if (!targetPath) {
+            const picked = await vscode.window.showOpenDialog({ canSelectMany: false, openLabel: 'Review' });
+            targetPath = picked?.[0]?.fsPath;
+        }
+        if (!targetPath) {
+            logger.counter('co-steer.reviewFile', { outcome: 'no_file' });
+            vscode.window.showWarningMessage('Open or pick a file to start a Co-Steer review.');
+            return;
+        }
+        if (targetPath.endsWith('.review.md')) {
+            logger.counter('co-steer.reviewFile', { outcome: 'is_sidecar' });
+            vscode.window.showWarningMessage('That is a Co-Steer sidecar, not an artifact to review.');
+            return;
+        }
+
+        const sidecarPath = `${targetPath}.review.md`;
+        try {
+            if (!fs.existsSync(sidecarPath)) {
+                await fs.promises.writeFile(sidecarPath, `# Pending Review Comments for \`${path.basename(targetPath)}\`\n`, 'utf8');
+                logger.info('co-steer.reviewFile: created sidecar', { sidecarPath });
+            }
+
+            try {
+                const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+                await injectPointer(targetPath, doc.languageId);
+            } catch (pointerErr: any) {
+                logger.warn('Failed to inject pointer comment', { error: pointerErr.message, targetPath });
+                const configAction = 'Configure Syntax';
+                vscode.window.showWarningMessage(
+                    `Co-Steer: Could not inject sidecar pointer into \`${path.basename(targetPath)}\`. Unknown comment syntax for \`${path.extname(targetPath).replace(/^\./, '') || 'unknown'}\`.`,
+                    configAction
+                ).then(selection => {
+                    if (selection === configAction) {
+                        vscode.commands.executeCommand('workbench.action.openSettings', 'co-steer.customCommentSyntaxes');
+                    }
+                });
+            }
+
+            artifactTreeProvider.refresh();
+            await openArtifact(targetPath);
+            const rendered = /\.(md|markdown)$/i.test(targetPath);
+            logger.counter('co-steer.reviewFile', { outcome: 'success', mode: rendered ? 'rendered' : 'text' });
+            vscode.window.showInformationMessage(
+                rendered
+                    ? `Reviewing ${path.basename(targetPath)} (rendered) — select text and click 💬 to comment.`
+                    : `Reviewing ${path.basename(targetPath)} — highlight lines and click the + to add a comment.`
+            );
+        } catch (err: any) {
+            logger.counter('co-steer.reviewFile', { outcome: 'error' });
+            logger.error('co-steer.reviewFile failed', { error: err.message, targetPath });
+            vscode.window.showErrorMessage(`Failed to start review: ${err.message}`);
+        }
     }));
 
     let iterateCmd = vscode.commands.registerCommand('co-steer.iterate', (item?: ArtifactItem) => {
@@ -160,6 +285,14 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage(`Failed to launch agent: ${err.message}`);
             return;
         }
+
+        // Tell the agent to act on the sidecar (not just the bare file). Sent over stdin so
+        // CLIs that read a prompt from stdin get full context; the file path is also an arg.
+        const reviewPrompt = buildReviewPrompt({
+            artifactPath: vscode.workspace.asRelativePath(filePath),
+            sidecarPath: vscode.workspace.asRelativePath(`${filePath}.review.md`)
+        });
+        child.stdin?.end(reviewPrompt);
 
         let stdout = '';
         let stderr = '';
@@ -235,6 +368,12 @@ export function activate(context: vscode.ExtensionContext) {
         const sidecarPath = `${originalFilePath}.review.md`;
         
         try {
+             try {
+                 await removePointer(originalFilePath);
+             } catch (pointerErr: any) {
+                 logger.warn('Failed to remove pointer comment', { error: pointerErr.message, originalFilePath });
+             }
+
              let sidecarDeleted = false;
              if (fs.existsSync(sidecarPath)) {
                  await fs.promises.unlink(sidecarPath);

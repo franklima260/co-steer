@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { countReviewItems, parseReviewItems, serializeReviewItem } from '../../utils/sidecar';
+import { countReviewItems, parseReviewItems, serializeReviewItem, buildSidecarContent } from '../../utils/sidecar';
 
 suite('Sidecar parser Test Suite', () => {
     test('parses id, status, location and multiple authored comments', () => {
@@ -92,5 +92,32 @@ Done.
         const counts = countReviewItems('# Pending Review Comments for `foo.js`');
         assert.strictEqual(counts.pending, 0);
         assert.strictEqual(counts.resolved, 0);
+    });
+
+    test('buildSidecarContent separates pending and resolved items', () => {
+        const pendingItem = {
+            id: 'r-1',
+            status: 'pending' as const,
+            file: 'a.ts',
+            comments: [{ author: 'You', text: 'fix this' }]
+        };
+        const resolvedItem = {
+            id: 'r-2',
+            status: 'resolved' as const,
+            file: 'b.ts',
+            comments: [{ author: 'You', text: 'fixed' }]
+        };
+        
+        const content = buildSidecarContent('test.md', [pendingItem, resolvedItem]);
+        
+        assert.ok(content.includes('# Review Comments for `test.md`'));
+        assert.ok(content.includes('<review_item id="r-1" status="pending">'));
+        assert.ok(content.includes('<!-- COSTEER_RESOLVED_START'));
+        assert.ok(content.includes('<review_item id="r-2" status="resolved">'));
+        assert.ok(content.includes('COSTEER_RESOLVED_END -->'));
+        
+        const pendingIdx = content.indexOf('<review_item id="r-1" status="pending">');
+        const resolvedStartIdx = content.indexOf('<!-- COSTEER_RESOLVED_START');
+        assert.ok(pendingIdx < resolvedStartIdx);
     });
 });

@@ -25,10 +25,16 @@ in the repository for the full design.
 
 | Command | Description |
 |---|---|
+| `co-steer.reviewFile` | Start reviewing a file (rendered panel for markdown, text view otherwise) |
+| `co-steer.copyPrompt` | Copy an instruction (read the sidecar, apply feedback, resolve) to paste into a chat agent |
 | `co-steer.addComment` | Write the highlighted range + feedback to the sidecar |
-| `co-steer.iterate` | Snapshot the artifact and run the configured agent on it |
+| `co-steer.iterate` | Snapshot the artifact and run the configured CLI agent, piping it the review prompt |
 | `co-steer.diff` | Show the pre-iteration ↔ current diff |
 | `co-steer.approve` | Delete the sidecar; optionally run an approved `.md` as a prompt |
+
+> **Comments live in a `<file>.review.md` sidecar, not in the file itself.** To have an AI
+> act on them, either run **Iterate** (for a configured CLI agent) or **Copy Agent Prompt**
+> and paste it into a chat agent — both point the agent at the sidecar.
 
 ## Settings
 

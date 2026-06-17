@@ -40,18 +40,20 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactIte
                         // Transient state (iterating) wins; otherwise derive from sidecar contents.
                         const counts = readSidecarCounts(sidecarPath);
                         const transient = this.stateStore?.get(originalFilePath);
+                        // "Resolved" only when there is at least one item and none are
+                        // pending; a freshly-started review (no items yet) stays pending.
                         const state: ArtifactState =
                             transient === 'iterating' ? 'iterating'
-                            : counts.pending > 0 ? 'pending'
-                            : 'resolved';
+                            : counts.pending === 0 && counts.resolved > 0 ? 'resolved'
+                            : 'pending';
 
                         return new ArtifactItem(
                             label,
                             vscode.TreeItemCollapsibleState.None,
                             {
-                                command: 'vscode.open',
+                                command: 'co-steer.open',
                                 title: 'Open Artifact',
-                                arguments: [vscode.Uri.file(originalFilePath).with({ scheme: 'ai-review' })]
+                                arguments: [vscode.Uri.file(originalFilePath)]
                             },
                             vscode.Uri.file(originalFilePath),
                             state,

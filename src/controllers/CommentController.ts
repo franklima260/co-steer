@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import {
     ReviewItem,
     parseReviewItems,
-    serializeReviewItem,
+    buildSidecarContent,
     generateReviewId
 } from '../utils/sidecar';
 
@@ -117,7 +117,7 @@ export class ArtifactCommentController {
                 logger.counter('comment.add', { outcome: 'success' });
             }
 
-            await fs.promises.writeFile(sidecarPath, this.buildSidecar(fileName, items), 'utf8');
+            await fs.promises.writeFile(sidecarPath, buildSidecarContent(fileName, items), 'utf8');
             this.renderFromSidecar(sidecarPath);
 
             logger.histogram('comment.add_duration_ms', Date.now() - startTime, { filePath: originalFilePath });
@@ -142,12 +142,6 @@ export class ArtifactCommentController {
         const start = thread.range ? thread.range.start.line : 0;
         const end = thread.range ? thread.range.end.line : 0;
         return lines.slice(start, end + 1).join('\n');
-    }
-
-    private buildSidecar(fileName: string, items: ReviewItem[]): string {
-        const header = `# Pending Review Comments for \`${fileName}\``;
-        const blocks = items.map(serializeReviewItem).join('\n\n');
-        return `${header}\n\n${blocks}\n`;
     }
 
     private findThreadId(sidecarPath: string, thread: vscode.CommentThread): string | undefined {

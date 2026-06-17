@@ -29,7 +29,7 @@ suite('ArtifactTreeProvider Test Suite', () => {
         assert.ok(children.length > 0, 'Should find at least one review file');
         const item = children.find(c => c.originalUri?.fsPath.endsWith('test.js'));
         assert.ok(item, 'Should find test.js artifact');
-        assert.strictEqual(item?.command?.command, 'vscode.open');
+        assert.strictEqual(item?.command?.command, 'co-steer.open');
     });
 
     test('item state reflects pending review items in the sidecar', async () => {

@@ -40,4 +40,19 @@ suite('Commands Test Suite', () => {
         // The original file must be untouched by the mock path.
         assert.strictEqual(fs.readFileSync(testFilePath, 'utf8'), '// code');
     });
+
+    test('co-steer.reviewFile on a markdown file runs end-to-end and seeds a sidecar', async () => {
+        const mdPath = path.join(testFixturesPath, 'reviewCmd.md');
+        const mdSidecar = `${mdPath}.review.md`;
+        fs.writeFileSync(mdPath, '# Heading\n\nbody', 'utf8');
+        try {
+            // Passing the uri exercises the full command path including the markdown branch
+            // (which opens the rendered webview panel).
+            await vscode.commands.executeCommand('co-steer.reviewFile', vscode.Uri.file(mdPath));
+            assert.ok(fs.existsSync(mdSidecar), 'reviewFile should create the sidecar so the artifact is tracked');
+        } finally {
+            if (fs.existsSync(mdPath)) fs.unlinkSync(mdPath);
+            if (fs.existsSync(mdSidecar)) fs.unlinkSync(mdSidecar);
+        }
+    });
 });

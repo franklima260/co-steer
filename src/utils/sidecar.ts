@@ -116,6 +116,26 @@ ${commentBlocks}
 </review_item>`;
 }
 
+/** Build a full sidecar document (header + serialized items) from a list of items. */
+export function buildSidecarContent(fileName: string, items: ReviewItem[]): string {
+    const header = `# Review Comments for \`${fileName}\``;
+    
+    const pendingItems = items.filter(i => i.status !== 'resolved');
+    const resolvedItems = items.filter(i => i.status === 'resolved');
+    
+    let content = `${header}\n`;
+    
+    if (pendingItems.length > 0) {
+        content += `\n${pendingItems.map(serializeReviewItem).join('\n\n')}\n`;
+    }
+    
+    if (resolvedItems.length > 0) {
+        content += `\n<!-- COSTEER_RESOLVED_START\n\n${resolvedItems.map(serializeReviewItem).join('\n\n')}\n\nCOSTEER_RESOLVED_END -->\n`;
+    }
+    
+    return content;
+}
+
 /** Count pending vs resolved review items. */
 export function countReviewItems(content: string): SidecarStatusCounts {
     const counts: SidecarStatusCounts = { pending: 0, resolved: 0 };
