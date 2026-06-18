@@ -43,4 +43,37 @@ suite('runAsPrompt Test Suite', () => {
         });
         assert.strictEqual(piped, false);
     });
+
+    test('runAsPrompt: spawns a real Node process and pipes stdin successfully', async () => {
+        const piped = await runAsPrompt({
+            filePath: planPath,
+            agentCommand: process.execPath,
+            agentArgs: ['-e', 'process.stdin.on("data", d => process.stdout.write(d));'],
+            prefix: 'Prefix:'
+        });
+
+        assert.strictEqual(piped, true, 'should successfully spawn and pipe');
+    });
+
+    test('runAsPrompt: handles non-zero exit from spawned process', async () => {
+        const piped = await runAsPrompt({
+            filePath: planPath,
+            agentCommand: process.execPath,
+            agentArgs: ['-e', 'process.exit(42);'],
+            prefix: 'Prefix:'
+        });
+
+        assert.strictEqual(piped, true, 'should successfully spawn even if exit code is non-zero');
+    });
+
+    test('runAsPrompt: handles failed spawn (non-existent command) without throwing', async () => {
+        const piped = await runAsPrompt({
+            filePath: planPath,
+            agentCommand: 'some-completely-invalid-command-that-does-not-exist-xyz',
+            agentArgs: [],
+            prefix: 'Prefix:'
+        });
+
+        assert.strictEqual(typeof piped, 'boolean', 'should resolve to a boolean status');
+    });
 });

@@ -74,12 +74,16 @@ Done.
             '</review_item>',
             '<review_item status="resolved">',
             '</review_item>',
+            '<review_item status="accepted">',
+            '</review_item>',
+            '<review_item status="rejected">',
+            '</review_item>',
             '<review_item status="pending">',
             '</review_item>'
         ].join('\n');
         const counts = countReviewItems(content);
-        assert.strictEqual(counts.pending, 2);
-        assert.strictEqual(counts.resolved, 1);
+        assert.strictEqual(counts.pending, 3, 'pending + accepted');
+        assert.strictEqual(counts.resolved, 2, 'resolved + rejected');
     });
 
     test('treats unknown status values as pending', () => {
@@ -94,30 +98,46 @@ Done.
         assert.strictEqual(counts.resolved, 0);
     });
 
-    test('buildSidecarContent separates pending and resolved items', () => {
+    test('buildSidecarContent separates active and done items', () => {
         const pendingItem = {
             id: 'r-1',
             status: 'pending' as const,
             file: 'a.ts',
             comments: [{ author: 'You', text: 'fix this' }]
         };
-        const resolvedItem = {
+        const acceptedItem = {
             id: 'r-2',
+            status: 'accepted' as const,
+            file: 'a.ts',
+            comments: [{ author: 'You', text: 'accepted feedback' }]
+        };
+        const rejectedItem = {
+            id: 'r-3',
+            status: 'rejected' as const,
+            file: 'b.ts',
+            comments: [{ author: 'You', text: 'rejected feedback' }]
+        };
+        const resolvedItem = {
+            id: 'r-4',
             status: 'resolved' as const,
             file: 'b.ts',
             comments: [{ author: 'You', text: 'fixed' }]
         };
         
-        const content = buildSidecarContent('test.md', [pendingItem, resolvedItem]);
+        const content = buildSidecarContent('test.md', [pendingItem, acceptedItem, rejectedItem, resolvedItem]);
         
         assert.ok(content.includes('# Review Comments for `test.md`'));
-        assert.ok(content.includes('<review_item id="r-1" status="pending">'));
+        assert.ok(content.includes('<review_item id="r-1" status="pending">'), 'pending is active');
+        assert.ok(content.includes('<review_item id="r-2" status="accepted">'), 'accepted is active');
         assert.ok(content.includes('<!-- COSTEER_RESOLVED_START'));
-        assert.ok(content.includes('<review_item id="r-2" status="resolved">'));
+        assert.ok(content.includes('<review_item id="r-3" status="rejected">'), 'rejected is done');
+        assert.ok(content.includes('<review_item id="r-4" status="resolved">'), 'resolved is done');
         assert.ok(content.includes('COSTEER_RESOLVED_END -->'));
         
         const pendingIdx = content.indexOf('<review_item id="r-1" status="pending">');
+        const acceptedIdx = content.indexOf('<review_item id="r-2" status="accepted">');
         const resolvedStartIdx = content.indexOf('<!-- COSTEER_RESOLVED_START');
         assert.ok(pendingIdx < resolvedStartIdx);
+        assert.ok(acceptedIdx < resolvedStartIdx);
     });
 });

@@ -10,9 +10,11 @@ const COSTEER_INSTRUCTIONS = `
 ### Co-Steer Agent Instructions
 ${COSTEER_MARKER_START}
 When editing any file in this workspace, check if a sidecar file named \`<filename>.review.md\` exists.
-If the sidecar file exists, read its contents and address any review comments marked as pending (e.g. status="pending").
-Ignore any review items inside the <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> block.
-Once you address a review comment, update its status to "resolved" in the sidecar.
+If the sidecar file exists, read its contents and address comments:
+- If status="accepted", address what was discussed in the comments.
+- If status="pending", analyze and address the comment; if you are unsure about the action item, ask the user for clarification.
+- If status="rejected" or status="resolved", ignore the comment. Do not edit or act on it.
+Once you address an accepted or pending comment, update its status to "resolved" in the sidecar.
 Do not ignore these sidecar comments.
 ${COSTEER_MARKER_END}
 `;
@@ -137,7 +139,7 @@ export async function generateWorkspaceRules(rootPath: string) {
                 jsonContent.rules = [];
             }
             if (Array.isArray(jsonContent.rules)) {
-                const newRule = 'When editing any file in this workspace, check if a Co-Steer sidecar file named `<filename>.review.md` exists. If it does, read and address the feedback comments inside it. Once addressed, change its status to "resolved" in the sidecar. Do NOT process review items inside <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> — they are already resolved and must be left unchanged.';
+                const newRule = 'When editing any file in this workspace, check if a Co-Steer sidecar file named `<filename>.review.md` exists. If it does, read and address the feedback comments: address those with status="accepted"; analyze and address those with status="pending" (asking for clarification if unsure). Do NOT process comments inside <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> or comments with status="rejected" or status="resolved". Once addressed, change their status to "resolved" in the sidecar.';
                 const idx = jsonContent.rules.findIndex((r: string) => typeof r === 'string' && (r.includes('Co-Steer') || r.includes('review.md')));
                 if (idx !== -1) {
                     jsonContent.rules[idx] = newRule;
@@ -153,7 +155,7 @@ export async function generateWorkspaceRules(rootPath: string) {
                 content = fs.readFileSync(filePath, 'utf8');
                 if (content.includes(COSTEER_MARKER_START)) {
                     const regex = new RegExp(`${COSTEER_MARKER_START}[\\s\\S]*?${COSTEER_MARKER_END}`, 'g');
-                    const newBlock = `${COSTEER_MARKER_START}\nWhen editing any file in this workspace, check if a sidecar file named \`<filename>.review.md\` exists.\nIf the sidecar file exists, read its contents and address any review comments marked as pending (e.g. status="pending").\nIgnore any review items inside the <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> block.\nOnce you address a review comment, update its status to "resolved" in the sidecar.\nDo not ignore these sidecar comments.\n${COSTEER_MARKER_END}`;
+                    const newBlock = `${COSTEER_MARKER_START}\nWhen editing any file in this workspace, check if a sidecar file named \`<filename>.review.md\` exists.\nIf the sidecar file exists, read its contents and address comments: address those with status="accepted"; analyze and address those with status="pending" (asking for clarification if unsure). Do NOT process comments inside <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> or comments with status="rejected" or status="resolved". Once addressed, change their status to "resolved" in the sidecar.\nDo not ignore these sidecar comments.\n${COSTEER_MARKER_END}`;
                     content = content.replace(regex, newBlock);
                     fs.writeFileSync(filePath, content, 'utf8');
                 } else {

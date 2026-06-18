@@ -1,76 +1,126 @@
 # Co-Steer
 
-Universal Artifact Review and Co-Steering for VS Code.
+Universal Artifact Review and Co-Steering.
 
-Co-Steer decouples the **Artifact → Inline Comment → Update → Approve** workflow from any
-single AI ecosystem. It uses the local file system as the single source of truth: your
-comments are written to structured `.review.md` sidecar files that any CLI agent
-(Claude Code, a local LLM, etc.) can read and act on. See `universal_artifact_review_ui_spec.md`
-in the repository for the full design.
+> [!WARNING]
+> **Compatibility Notice:** Co-Steer is primarily designed and intended for use within the **Antigravity IDE** environment. While it can run in standard Visual Studio Code, it has not been thoroughly tested in VS Code and some integrations may exhibit unexpected behavior or fall back to manual clipboard options.
 
-## How it works
+Co-Steer decouples the **Artifact → Inline Comment → Update → Approve** workflow from any single AI extension or chat panel. It uses your local file system as the single source of truth: your comments and instructions are stored in structured `.review.md` sidecar files that any CLI agent (such as Claude Code or local LLMs) can read, modify, and act on.
 
-1. An AI agent generates a file in your workspace.
-2. You create a `<file>.review.md` sidecar (by commenting, below) to flag it for review.
-   It appears in the **Co-Steer** sidebar with its review state.
-3. Open the artifact — it opens as a read-only `ai-review://` virtual document.
-4. Highlight lines and add an inline comment. Co-Steer writes a structured
-   `<review_item>` block to the sidecar.
-5. **Iterate**: Co-Steer snapshots the file, then runs your configured agent on it.
-6. **Diff**: view a real before ↔ after diff of the agent's changes.
-7. **Approve**: the sidecar is deleted; for Markdown plans you can hand the approved
-   content straight to the agent as a prompt.
+---
+
+## How it Works
+
+1. **Start Review:** Open any file generated/modified by an AI agent and trigger the **Review File** command. This opens the file as a read-only `ai-review://` virtual document and registers it in the **Co-Steer** sidebar tree view.
+2. **Comment Gutter:** Highlight any line range in the virtual document and add an inline comment. Co-Steer writes a structured `<review_item>` XML block to a companion `<filename>.review.md` sidecar file.
+3. **Review States:** Support is included for four distinct item review states:
+   - `pending` (new comment needing review)
+   - `accepted` (comment approved for implementation)
+   - `rejected` (comment rejected)
+   - `resolved` (implemented and closed)
+4. **Agent Iteration:** Click **Iterate** in the sidebar. Co-Steer captures a pre-iteration snapshot baseline, launches your configured CLI agent (passing the artifact path as an argument), and pipes the complete instruction set from the sidecar directly into the agent's `stdin`.
+5. **Diff Changes:** Click the **Diff** icon to compare the pre-iteration baseline with the current code, visualizing exactly what the agent changed.
+6. **Direct Agent Handoffs:** When working inside markdown-based plan files, dedicated buttons allow direct handoffs:
+   - **🚀 Antigravity:** Sends the prompt straight into the Antigravity Agent Panel (falls back to clipboard if running in standard VS Code).
+   - **🤖 Claude:** Launches a deep link to the official Claude Code VS Code extension. The handler automatically scans `~/.claude/sessions` and checks active process PIDs to target your **currently active Claude conversation session** in the workspace rather than opening a new tab.
+7. **Approve:** Clicking **Approve** deletes the sidecar and clears baseline snapshots. For Markdown artifacts, you can pipe the approved contents straight to your agent as a prompt instruction.
+
+---
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `co-steer.reviewFile` | Start reviewing a file (rendered panel for markdown, text view otherwise) |
-| `co-steer.copyPrompt` | Copy an instruction (read the sidecar, apply feedback, resolve) to paste into a chat agent |
-| `co-steer.addComment` | Write the highlighted range + feedback to the sidecar |
-| `co-steer.iterate` | Snapshot the artifact and run the configured CLI agent, piping it the review prompt |
-| `co-steer.diff` | Show the pre-iteration ↔ current diff |
-| `co-steer.approve` | Delete the sidecar; optionally run an approved `.md` as a prompt |
-
-> **Comments live in a `<file>.review.md` sidecar, not in the file itself.** To have an AI
-> act on them, either run **Iterate** (for a configured CLI agent) or **Copy Agent Prompt**
-> and paste it into a chat agent — both point the agent at the sidecar.
-
-## Settings
-
-| Setting | Default | Description |
+| Command | Title | Description |
 |---|---|---|
-| `co-steer.agentCommand` | `""` | Executable to run on iterate. The artifact path is the final argument. Empty → built-in mock. |
-| `co-steer.agentArgs` | `[]` | Extra args passed before the artifact path. |
-| `co-steer.promptPrefix` | `Execute the following approved plan:` | Prepended to an approved Markdown artifact on "Run as prompt". |
+| `co-steer.reviewFile` | `Review File` | Starts a review on the active file, opening a virtual document and creating a sidecar. |
+| `co-steer.copyPrompt` | `Copy Agent Prompt` | Assembles sidecar instructions into a canonical prompt and copies it to the clipboard. |
+| `co-steer.addComment` | `Add Comment` | Serializes highlighted code + feedback and appends it to the sidecar. |
+| `co-steer.iterate` | `Iterate with Agent` | Snapshots the file and launches the configured CLI agent, piping the sidecar content over stdin. |
+| `co-steer.diff` | `Diff vs Target` | Displays a side-by-side diff comparing the pre-iteration snapshot with current workspace content. |
+| `co-steer.approve` | `Approve Artifact` | Deletes the `.review.md` sidecar and optionally runs approved plans as agent prompts. |
+| `co-steer.sendPromptToAntigravity` | `Send to Antigravity` | Hands off the current review prompt directly to the Antigravity Agent Panel. |
+| `co-steer.sendPromptToClaude` | `Send to Claude` | Hands off the prompt to the active Claude Code extension tab via custom protocol handler. |
 
-The agent is launched without a shell (`execFile`/`spawn`), so paths and arguments are
-never interpolated into a command line.
+---
 
-## Development
+## Configuration Settings
 
-```bash
-npm install
-npm run package      # type-check + production bundle
-npm test             # runs the @vscode/test-electron integration suite
+Define these settings in your global `settings.json` or project `.vscode/settings.json` file:
+
+* **`co-steer.agentCommand`** (String, default: `""`):
+  The executable to run on iteration (e.g., `"claude"` or `"node"`). The artifact file path is appended as the final argument. If left empty, a mock iteration runs.
+* **`co-steer.agentArgs`** (Array of Strings, default: `[]`):
+  Additional arguments passed to the agent command before the artifact path.
+* **`co-steer.promptPrefix`** (String, default: `"Execute the following approved plan:"`):
+  Text prepended to approved Markdown plans when executing them via "Run as prompt".
+* **`co-steer.customCommentSyntaxes`** (Object, default: `{}`):
+  A dictionary mapping VS Code language IDs or file extensions to custom comment syntaxes for injecting the sidecar pointer.
+  *Example:*
+  ```json
+  "co-steer.customCommentSyntaxes": {
+    "json": "//",
+    "html": ["<!--", "-->"]
+  }
+  ```
+
+---
+
+## Sidecar Schema (`.review.md`)
+
+Each sidecar file contains a list of review items written in clean XML tags readable by human developers and AI models:
+
+```markdown
+# Review Comments for `src/sample.ts`
+
+<review_item id="r-3f9c2d1b" status="pending">
+<location>
+File: `src/sample.ts`
+Lines: 15-22
+</location>
+
+<target_code>
+```typescript
+function calculateTotal(items: number[]): number {
+    return items.reduce((a, b) => a + b, 0);
+}
+```
+</target_code>
+
+<comment author="You">
+Optimize this to use a simple loop if performance becomes a concern.
+</comment>
+
+<comment author="Agent">
+Understood. Spawning loop replacement.
+</comment>
+</review_item>
+
+<!-- COSTEER_RESOLVED_START
+<review_item id="r-8b2c4d6a" status="resolved">
+...
+</review_item>
+COSTEER_RESOLVED_END -->
 ```
 
-Package an installable `.vsix`:
+---
 
-```bash
-npm run vsix         # produces co-steer.vsix
-```
+## Contributing & Development
 
-Install it with **Extensions → ⋯ → Install from VSIX…**, or from the CLI:
+To build and run tests locally:
 
-```bash
-code --install-extension co-steer.vsix
-```
-
-> **Note:** the test harness launches a real VS Code instance and cannot run while a
-> VS Code-based editor (including forks) holds the `vscode-updating` mutex. Close other
-> editors locally, or rely on CI (`.github/workflows/ci.yml`), which runs the suite
-> headless under `xvfb`.
-
-See `Testing_Standards.md` and `Telemetry_Standards.md` in the repository for the binding
-engineering standards.
+1. **Install Dependencies:**
+   ```bash
+   npm install
+   ```
+2. **Build and Package:**
+   ```bash
+   npm run package      # typecheck and compile a production bundle
+   ```
+3. **Run Integration Test Suite:**
+   ```bash
+   npm run test         # launches test suite in a headless VS Code instance
+   ```
+4. **Local Installation:**
+   Pack the extension into a `.vsix` file and install it locally:
+   ```bash
+   npm run install-local
+   ```

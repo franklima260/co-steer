@@ -35,9 +35,11 @@ ${comments}
         if (fs.existsSync(sidecarPath)) fs.unlinkSync(sidecarPath);
     });
 
-    test('maps pending/resolved status to native thread resolution state', () => {
+    test('maps pending/resolved/accepted/rejected status to native thread resolution state', () => {
         fs.writeFileSync(sidecarPath, [
             item('r-pending', 'pending', '<comment author="You">fix this</comment>'),
+            item('r-accepted', 'accepted', '<comment author="You">fix this</comment>'),
+            item('r-rejected', 'rejected', '<comment author="You">fix this</comment>'),
             item('r-done', 'resolved', '<comment author="You">fix this</comment>')
         ].join('\n\n'), 'utf8');
 
@@ -45,13 +47,19 @@ ${comments}
         controller.renderFromSidecar(sidecarPath);
 
         const threads = controller.threadsFor(sidecarPath);
-        assert.strictEqual(threads.length, 2, 'one thread per review item');
+        assert.strictEqual(threads.length, 4, 'one thread per review item');
 
         const states = threads.map(t => t.state).sort();
+        const expected = [
+            vscode.CommentThreadState.Unresolved,
+            vscode.CommentThreadState.Unresolved,
+            vscode.CommentThreadState.Resolved,
+            vscode.CommentThreadState.Resolved
+        ].sort();
         assert.deepStrictEqual(
             states,
-            [vscode.CommentThreadState.Unresolved, vscode.CommentThreadState.Resolved].sort(),
-            'one Unresolved and one Resolved thread'
+            expected,
+            'two Unresolved and two Resolved threads'
         );
         controller.dispose();
     });

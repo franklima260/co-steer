@@ -6,7 +6,7 @@ suite('buildReviewPrompt Test Suite', () => {
         const prompt = buildReviewPrompt({ artifactPath: 'docs/Philosophy.md', sidecarPath: 'docs/Philosophy.md.review.md' });
         assert.ok(prompt.includes('docs/Philosophy.md.review.md'), 'mentions the sidecar to read');
         assert.ok(prompt.includes('docs/Philosophy.md'), 'mentions the artifact to edit');
-        assert.ok(/<review_item>/.test(prompt), 'explains the review_item structure');
+        assert.ok(prompt.includes('accepted'), 'tells the agent to address accepted items');
         assert.ok(prompt.includes('resolved'), 'tells the agent to resolve addressed items');
     });
 });

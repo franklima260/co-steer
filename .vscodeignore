@@ -19,8 +19,6 @@ tsconfig.json
 **/*.ts
 
 # Repo docs that don't belong in the published package
-universal_artifact_review_ui_spec.md
 Testing_Standards.md
 Telemetry_Standards.md
-REVIEW_REPORT.md
 package-lock.json

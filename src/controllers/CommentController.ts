@@ -196,14 +196,14 @@ export class ArtifactCommentController {
             );
             thread.canReply = true;
             thread.contextValue = item.status;
-            if (item.status === 'resolved') {
+            if (item.status === 'resolved' || item.status === 'rejected') {
                 thread.state = vscode.CommentThreadState.Resolved;
                 thread.collapsibleState = vscode.CommentThreadCollapsibleState.Collapsed;
-                thread.label = 'Resolved';
+                thread.label = item.status === 'resolved' ? 'Resolved' : 'Rejected';
             } else {
                 thread.state = vscode.CommentThreadState.Unresolved;
                 thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
-                thread.label = undefined;
+                thread.label = item.status === 'accepted' ? 'Accepted' : undefined;
             }
         }
 

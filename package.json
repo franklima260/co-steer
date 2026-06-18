@@ -48,6 +48,18 @@
         "title": "Copy Agent Prompt",
         "category": "Co-Steer",
         "icon": "$(clippy)"
+      },
+      {
+        "command": "co-steer.sendPromptToAntigravity",
+        "title": "Send to Antigravity",
+        "category": "Co-Steer",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "co-steer.sendPromptToClaude",
+        "title": "Send to Claude",
+        "category": "Co-Steer",
+        "icon": "$(play)"
       }
     ],
     "menus": {
@@ -186,8 +198,9 @@
     "check-types": "tsc --noEmit",
     "compile-tests": "tsc -p .",
     "watch-tests": "tsc -p . -w",
-    "test": "npm run compile-tests && node ./out/test/runTest.js",
-    "vsix": "vsce package --allow-missing-repository -o co-steer.vsix"
+    "test": "node esbuild.js && npm run compile-tests && node ./out/test/runTest.js",
+    "vsix": "vsce package --allow-missing-repository -o co-steer.vsix",
+    "install-local": "npm run vsix && code --install-extension co-steer.vsix && (if exist \"%LOCALAPPDATA%\\Programs\\Antigravity IDE\\bin\\antigravity-ide.cmd\" \"%LOCALAPPDATA%\\Programs\\Antigravity IDE\\bin\\antigravity-ide.cmd\" --install-extension co-steer.vsix)"
   },
   "devDependencies": {
     "@types/vscode": "^1.90.0",

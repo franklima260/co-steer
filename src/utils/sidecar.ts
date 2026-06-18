@@ -6,7 +6,7 @@ export interface SidecarStatusCounts {
     resolved: number;
 }
 
-export type ReviewStatus = 'pending' | 'resolved';
+export type ReviewStatus = 'pending' | 'accepted' | 'rejected' | 'resolved';
 
 export interface ReviewComment {
     author: string;
@@ -56,7 +56,11 @@ export function parseReviewItems(content: string): ReviewItem[] {
         const attrs = match[1];
         const body = match[2];
 
-        const status: ReviewStatus = attr(attrs, 'status') === 'resolved' ? 'resolved' : 'pending';
+        const parsedStatus = attr(attrs, 'status');
+        const status: ReviewStatus =
+            parsedStatus === 'resolved' ? 'resolved' :
+            parsedStatus === 'accepted' ? 'accepted' :
+            parsedStatus === 'rejected' ? 'rejected' : 'pending';
         const id = attr(attrs, 'id') || synthesizeId(body);
 
         const fileMatch = /File:\s*`([^`]+)`/.exec(body);
@@ -120,13 +124,13 @@ ${commentBlocks}
 export function buildSidecarContent(fileName: string, items: ReviewItem[]): string {
     const header = `# Review Comments for \`${fileName}\``;
     
-    const pendingItems = items.filter(i => i.status !== 'resolved');
-    const resolvedItems = items.filter(i => i.status === 'resolved');
+    const activeItems = items.filter(i => i.status === 'pending' || i.status === 'accepted');
+    const resolvedItems = items.filter(i => i.status === 'resolved' || i.status === 'rejected');
     
     let content = `${header}\n`;
     
-    if (pendingItems.length > 0) {
-        content += `\n${pendingItems.map(serializeReviewItem).join('\n\n')}\n`;
+    if (activeItems.length > 0) {
+        content += `\n${activeItems.map(serializeReviewItem).join('\n\n')}\n`;
     }
     
     if (resolvedItems.length > 0) {
@@ -140,7 +144,7 @@ export function buildSidecarContent(fileName: string, items: ReviewItem[]): stri
 export function countReviewItems(content: string): SidecarStatusCounts {
     const counts: SidecarStatusCounts = { pending: 0, resolved: 0 };
     for (const item of parseReviewItems(content)) {
-        if (item.status === 'resolved') {
+        if (item.status === 'resolved' || item.status === 'rejected') {
             counts.resolved++;
         } else {
             counts.pending++;

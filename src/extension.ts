@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as child_process from 'child_process';
+import * as os from 'os';
 import { ArtifactTreeProvider, ArtifactItem } from './providers/ArtifactTreeProvider';
 import { ReviewDocumentProvider } from './providers/ReviewDocumentProvider';
 import { SnapshotProvider } from './providers/SnapshotProvider';
@@ -12,7 +13,9 @@ import { runAsPrompt } from './agent/promptRunner';
 import { buildAgentSpawn } from './agent/spawn';
 import { buildReviewPrompt } from './agent/reviewPrompt';
 import { MarkdownReviewPanel } from './panels/MarkdownReviewPanel';
+import { openLinkHelper } from './utils/openLink';
 import { logger } from './utils/logger';
+
 import { checkAndPromptWorkspaceRules } from './agent/workspaceRules';
 import { injectPointer, removePointer } from './utils/pointerInjector';
 
@@ -164,6 +167,75 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.env.clipboard.writeText(prompt);
         logger.counter('co-steer.copyPrompt', { outcome: 'success' });
         vscode.window.showInformationMessage('Co-Steer: agent prompt copied — paste it to your AI agent.');
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('co-steer.sendPromptToAntigravity', async (arg?: vscode.Uri | ArtifactItem) => {
+        const fsPath = resolveArtifactPath(arg);
+        if (!fsPath) {
+            logger.counter('co-steer.sendPromptToAntigravity', { outcome: 'no_file' });
+            vscode.window.showWarningMessage('Select an artifact (or open a file) to send its agent prompt.');
+            return;
+        }
+        const prompt = buildReviewPrompt({
+            artifactPath: vscode.workspace.asRelativePath(fsPath),
+            sidecarPath: vscode.workspace.asRelativePath(`${fsPath}.review.md`)
+        });
+
+        try {
+            logger.info('Sending prompt to Antigravity agent panel');
+            await vscode.commands.executeCommand('antigravity.sendPromptToAgentPanel', prompt);
+            logger.counter('co-steer.sendPromptToAntigravity', { outcome: 'success' });
+            vscode.window.showInformationMessage('Co-Steer: Prompt sent to Antigravity Agent Panel.');
+        } catch (err: any) {
+            logger.counter('co-steer.sendPromptToAntigravity', { outcome: 'fallback_clipboard', error: err.message });
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showWarningMessage('Antigravity agent panel not active. Prompt copied to clipboard instead.');
+        }
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('co-steer.sendPromptToClaude', async (arg?: vscode.Uri | ArtifactItem) => {
+        const fsPath = resolveArtifactPath(arg);
+        if (!fsPath) {
+            logger.counter('co-steer.sendPromptToClaude', { outcome: 'no_file' });
+            vscode.window.showWarningMessage('Select an artifact (or open a file) to send its agent prompt.');
+            return;
+        }
+        const prompt = buildReviewPrompt({
+            artifactPath: vscode.workspace.asRelativePath(fsPath),
+            sidecarPath: vscode.workspace.asRelativePath(`${fsPath}.review.md`)
+        });
+
+        try {
+            const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(fsPath));
+            const workspaceRoot = folder ? folder.uri.fsPath : (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || path.dirname(fsPath));
+
+            let sessionId: string | undefined;
+            try {
+                sessionId = await getActiveClaudeSessionId(workspaceRoot);
+            } catch (sessionErr: any) {
+                logger.warn('Failed to resolve active Claude session ID', { error: sessionErr.message });
+            }
+
+            logger.info('Sending prompt to Claude', { promptLength: prompt.length, hasSession: !!sessionId });
+
+            if (sessionId) {
+                // Claude Code's URI handler (/open) starts a new session and cannot inject a
+                // prompt into an already-open one — it shows "Session is already open. Your
+                // prompt was not applied." Copy to clipboard so the user can paste it directly.
+                await vscode.env.clipboard.writeText(prompt);
+                logger.counter('co-steer.sendPromptToClaude', { outcome: 'clipboard_active_session', hasSession: true });
+                vscode.window.showInformationMessage('Co-Steer: Prompt copied to clipboard — paste it into the open Claude Code session.');
+            } else {
+                const scheme = vscode.env.uriScheme;
+                const uri = vscode.Uri.parse(`${scheme}://anthropic.claude-code/open?prompt=${encodeURIComponent(prompt)}`);
+                await openLinkHelper.openExternal(uri);
+                logger.counter('co-steer.sendPromptToClaude', { outcome: 'success_uri', hasSession: false });
+            }
+        } catch (err: any) {
+            logger.counter('co-steer.sendPromptToClaude', { outcome: 'error', error: err.message });
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showWarningMessage('Failed to send prompt to Claude. Prompt copied to clipboard instead.');
+        }
     }));
 
     // Entry point: start reviewing a file. Creates the sidecar (so it shows in the panel),
@@ -412,3 +484,83 @@ export function deactivate() {
     logger.info('Co-Steer is deactivating');
     logger.dispose();
 }
+
+export interface ClaudeSession {
+    pid: number;
+    sessionId: string;
+    cwd: string;
+    startedAt: number;
+    entrypoint: string;
+}
+
+export function normalizePathForComparison(p: string): string {
+    return path.normalize(p).toLowerCase().replace(/[\\/]+/g, '/').replace(/\/$/, '');
+}
+
+export async function getActiveClaudeSessionId(workspaceRoot: string, homeDirOverride?: string): Promise<string | undefined> {
+    const homeDir = homeDirOverride || process.env.CO_STEER_TEST_HOME || os.homedir();
+    const sessionsDir = path.join(homeDir, '.claude', 'sessions');
+    if (!fs.existsSync(sessionsDir)) {
+        return undefined;
+    }
+
+    const targetCwdNormalized = normalizePathForComparison(workspaceRoot);
+    let files: string[];
+    try {
+        files = await fs.promises.readdir(sessionsDir);
+    } catch (err) {
+        return undefined;
+    }
+
+    const sessions: ClaudeSession[] = [];
+    for (const file of files) {
+        if (!file.endsWith('.json')) {
+            continue;
+        }
+        try {
+            const filePath = path.join(sessionsDir, file);
+            const content = await fs.promises.readFile(filePath, 'utf8');
+            const data = JSON.parse(content) as ClaudeSession;
+            if (data && typeof data.sessionId === 'string' && typeof data.cwd === 'string') {
+                sessions.push(data);
+            }
+        } catch (err) {
+            // ignore malformed/unreadable session files
+        }
+    }
+
+    // Filter by matching cwd
+    const matchingSessions = sessions.filter(s => normalizePathForComparison(s.cwd) === targetCwdNormalized);
+    if (matchingSessions.length === 0) {
+        return undefined;
+    }
+
+    // Check if PID is alive
+    const isPidAlive = (pid: number): boolean => {
+        try {
+            process.kill(pid, 0);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    };
+
+    // 1. Look for alive claude-vscode sessions
+    const aliveVscodeSessions = matchingSessions.filter(s => s.entrypoint === 'claude-vscode' && isPidAlive(s.pid));
+    if (aliveVscodeSessions.length > 0) {
+        aliveVscodeSessions.sort((a, b) => b.startedAt - a.startedAt);
+        return aliveVscodeSessions[0].sessionId;
+    }
+
+    // 2. Look for any alive sessions
+    const aliveSessions = matchingSessions.filter(s => isPidAlive(s.pid));
+    if (aliveSessions.length > 0) {
+        aliveSessions.sort((a, b) => b.startedAt - a.startedAt);
+        return aliveSessions[0].sessionId;
+    }
+
+    // 3. Fallback: most recently started session matching the workspace
+    matchingSessions.sort((a, b) => b.startedAt - a.startedAt);
+    return matchingSessions[0].sessionId;
+}
+

@@ -1,0 +1,5 @@
+{
+  "rules": [
+    "When editing any file in this workspace, check if a Co-Steer sidecar file named `<filename>.review.md` exists. If it does, read and address the feedback comments: address those with status=\"accepted\"; analyze and address those with status=\"pending\" (asking for clarification if unsure). Do NOT process comments inside <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> or comments with status=\"rejected\" or status=\"resolved\". Once addressed, change their status to \"resolved\" in the sidecar."
+  ]
+}
