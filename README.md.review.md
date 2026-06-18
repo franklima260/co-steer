@@ -1,5 +1,28 @@
 # Review Comments for `README.md`
 
+<review_item id="r-0fe59fbf5c" status="resolved">
+<location>
+File: `README.md`
+Lines: 2-2
+</location>
+
+<target_code>
+```md
+# Co-Steer
+```
+</target_code>
+
+<comment author="You">
+This whole document seems verbos. Please shorten it.
+</comment>
+
+<comment author="Agent">
+I've completely rewritten `README.md` to be much more concise while retaining all the essential information. The intro, workflow steps, config settings, sidecar schema, and development instructions have all been significantly shortened.
+</comment>
+</review_item>
+
+<!-- COSTEER_RESOLVED_START
+
 <review_item id="r-4013532fc9" status="resolved">
 <location>
 File: `README.md`
@@ -8,19 +31,7 @@ Lines: 15-27
 
 <target_code>
 ```md
-```mermaid
-flowchart LR
-    A[Open AI-generated file] --> B[Review File command]
-    B --> C[Add inline comments]
-    C --> D{Accept / Reject?}
-    D -->|Accepted| E[Click Iterate]
-    D -->|Rejected| C
-    E --> F[Agent reads sidecar & updates file]
-    F --> G[Diff Changes]
-    G --> H{Satisfied?}
-    H -->|No| C
-    H -->|Yes| I[Approve & Handoff]
-```
+
 ```
 </target_code>
 
@@ -32,8 +43,6 @@ The changes look good add the images in the docs folder.
 Updated the image placeholders to point to `docs/Review a file.PNG`, `docs/Comment.PNG`, and `docs/Claude response.PNG`.
 </comment>
 </review_item>
-
-<!-- COSTEER_RESOLVED_START
 
 <review_item id="r-911e8fe61b" status="resolved">
 <location>
