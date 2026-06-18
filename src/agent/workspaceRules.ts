@@ -11,15 +11,15 @@ const COSTEER_INSTRUCTIONS = `
 ${COSTEER_MARKER_START}
 When editing any file in this workspace, check if a sidecar file named \`<filename>.review.md\` exists.
 If the sidecar file exists, read its contents and address comments:
-- If status="accepted", address what was discussed in the comments.
-- If status="pending", analyze and address the comment; if you are unsure about the action item, ask the user for clarification.
+- If status="accepted", you may take action on the main document to address what was discussed.
+- If status="pending", you MUST ONLY reply to the comment chain in the sidecar. Keep your replies extremely concise. DO NOT take any action on the main document until the user explicitly approves the comment chain.
 - If status="rejected" or status="resolved", ignore the comment. Do not edit or act on it.
 Once you address an accepted or pending comment, update its status to "resolved" in the sidecar.
 Do not ignore these sidecar comments.
 ${COSTEER_MARKER_END}
 `;
 
-export const COSTEER_RULES_VERSION = '2';
+export const COSTEER_RULES_VERSION = '4';
 
 export async function checkAndPromptWorkspaceRules(context: vscode.ExtensionContext) {
     const folders = vscode.workspace.workspaceFolders;
@@ -139,7 +139,7 @@ export async function generateWorkspaceRules(rootPath: string) {
                 jsonContent.rules = [];
             }
             if (Array.isArray(jsonContent.rules)) {
-                const newRule = 'When editing any file in this workspace, check if a Co-Steer sidecar file named `<filename>.review.md` exists. If it does, read and address the feedback comments: address those with status="accepted"; analyze and address those with status="pending" (asking for clarification if unsure). Do NOT process comments inside <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> or comments with status="rejected" or status="resolved". Once addressed, change their status to "resolved" in the sidecar.';
+                const newRule = 'When editing any file in this workspace, check if a Co-Steer sidecar file named `<filename>.review.md` exists. If it does, read and address the feedback comments: for status="accepted", you may take action on the main document; for status="pending", you MUST ONLY reply to the comment chain in the sidecar (keep replies extremely concise) and DO NOT edit the main document until the user explicitly approves it. Do NOT process comments inside <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> or comments with status="rejected" or status="resolved". Once addressed, change their status to "resolved" in the sidecar.';
                 const idx = jsonContent.rules.findIndex((r: string) => typeof r === 'string' && (r.includes('Co-Steer') || r.includes('review.md')));
                 if (idx !== -1) {
                     jsonContent.rules[idx] = newRule;
@@ -155,7 +155,7 @@ export async function generateWorkspaceRules(rootPath: string) {
                 content = fs.readFileSync(filePath, 'utf8');
                 if (content.includes(COSTEER_MARKER_START)) {
                     const regex = new RegExp(`${COSTEER_MARKER_START}[\\s\\S]*?${COSTEER_MARKER_END}`, 'g');
-                    const newBlock = `${COSTEER_MARKER_START}\nWhen editing any file in this workspace, check if a sidecar file named \`<filename>.review.md\` exists.\nIf the sidecar file exists, read its contents and address comments: address those with status="accepted"; analyze and address those with status="pending" (asking for clarification if unsure). Do NOT process comments inside <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> or comments with status="rejected" or status="resolved". Once addressed, change their status to "resolved" in the sidecar.\nDo not ignore these sidecar comments.\n${COSTEER_MARKER_END}`;
+                    const newBlock = `${COSTEER_MARKER_START}\nWhen editing any file in this workspace, check if a sidecar file named \`<filename>.review.md\` exists.\nIf the sidecar file exists, read its contents and address comments: for status="accepted", you may take action on the main document; for status="pending", you MUST ONLY reply to the comment chain in the sidecar (keep replies extremely concise) and DO NOT edit the main document until the user explicitly approves it. Do NOT process comments inside <!-- COSTEER_RESOLVED_START ... COSTEER_RESOLVED_END --> or comments with status="rejected" or status="resolved". Once addressed, change their status to "resolved" in the sidecar.\nDo not ignore these sidecar comments.\n${COSTEER_MARKER_END}`;
                     content = content.replace(regex, newBlock);
                     fs.writeFileSync(filePath, content, 'utf8');
                 } else {

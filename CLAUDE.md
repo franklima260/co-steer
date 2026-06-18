@@ -11,8 +11,8 @@ Rigorously apply these standards to ALL code changes.
 <!-- COSTEER_START -->
 When editing any file in this workspace, check if a sidecar file named `<filename>.review.md` exists.
 If the sidecar file exists, read its contents and address comments:
-- If status="accepted", address what was discussed in the comments.
-- If status="pending", analyze and address the comment; if you are unsure about the action item, ask the user for clarification.
+- If status="accepted", you may take action on the main document to address what was discussed.
+- If status="pending", you MUST ONLY reply to the comment chain in the sidecar. Keep your replies extremely concise. DO NOT take any action on the main document until the user explicitly approves the comment chain.
 - If status="rejected" or status="resolved", ignore the comment. Do not edit or act on it.
 Once you address an accepted or pending comment, update its status to "resolved" in the sidecar.
 Do not ignore these sidecar comments.

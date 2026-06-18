@@ -1,4 +1,3 @@
-<!-- [Co-Steer] pending review: README.md.review.md -->
 # Co-Steer
 
 Universal Artifact Review and Co-Steering.
