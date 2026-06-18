@@ -1,3 +1,4 @@
+<!-- [Co-Steer] pending review: CLAUDE.md.review.md -->
 # Co-Steer Development AI Directives
 
 When working on the Co-Steer codebase, you must ALWAYS adhere to the rigorous standards defined in the following documents:

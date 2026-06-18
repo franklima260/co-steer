@@ -4,6 +4,10 @@
   "description": "Universal Artifact Review and Co-Steering",
   "version": "0.0.1",
   "publisher": "frank",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/franklima260/co-steer.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
